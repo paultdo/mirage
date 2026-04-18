@@ -10,7 +10,7 @@ import {
   updateSessionMode,
 } from './db.js';
 
-const FACE_THRESHOLD = Number(process.env.FACE_THRESHOLD || '0.6');
+const FACE_THRESHOLD = Number(process.env.FACE_THRESHOLD || '0.95');
 const DEMO_MODE = String(process.env.DEMO_MODE || 'false').toLowerCase() === 'true';
 const DEMO_DURESS_PASSWORD = process.env.DEMO_DURESS_PASSWORD || '';
 

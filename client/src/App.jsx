@@ -21,7 +21,7 @@ function RequireAuth({ isAuthed, children }) {
   return children;
 }
 
-function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapState }) {
+function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapState, setBootstrapState }) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -35,11 +35,13 @@ function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapStat
       setSessionToken: (token) => {
         setSessionToken(token);
         setSessionTokenState(token);
+        setBootstrapState(token ? 'loading' : 'ready');
       },
       clearSession: () => {
         clearSessionToken();
         setSessionTokenState(null);
         setMe(null);
+        setBootstrapState('ready');
         navigate('/');
       },
       refreshMe: async () => {
@@ -48,7 +50,7 @@ function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapStat
         return nextMe;
       },
     }),
-    [me, navigate, sessionToken, setMe, setSessionTokenState],
+    [me, navigate, sessionToken, setBootstrapState, setMe, setSessionTokenState],
   );
 
   useEffect(() => {
@@ -57,7 +59,7 @@ function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapStat
     }
   }, [bootstrapState, location.pathname, navigate]);
 
-  if (!isReady) {
+  if (!isReady && location.pathname !== '/') {
     return (
       <div className="app-loading-shell">
         <div className="app-loading-panel">
@@ -147,6 +149,7 @@ export default function App() {
       me={me}
       setMe={setMe}
       bootstrapState={bootstrapState}
+      setBootstrapState={setBootstrapState}
     />
   );
 }

@@ -48,12 +48,21 @@ export default function Webcam({
     streamRef.current = stream;
 
     if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      const playPromise = videoRef.current.play();
+      const video = videoRef.current;
+      video.srcObject = stream;
+      const playPromise = video.play();
       if (playPromise?.catch) {
         playPromise.catch((playError) => {
           console.warn('Unable to autoplay webcam preview:', playError);
         });
+      }
+
+      try {
+        await waitForVideoFrame(video);
+      } catch (videoError) {
+        setStatus('error');
+        setError('The camera started, but no video frame was available yet. Try again.');
+        return;
       }
     }
 
@@ -147,4 +156,33 @@ function getCameraErrorMessage(error) {
     default:
       return 'Unable to start the camera. Check browser permissions and try again.';
   }
+}
+
+function waitForVideoFrame(video) {
+  if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      cleanup();
+      reject(new Error('video_not_ready'));
+    }, 5000);
+
+    function cleanup() {
+      window.clearTimeout(timeoutId);
+      video.removeEventListener('loadeddata', handleReady);
+      video.removeEventListener('canplay', handleReady);
+    }
+
+    function handleReady() {
+      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        cleanup();
+        resolve();
+      }
+    }
+
+    video.addEventListener('loadeddata', handleReady);
+    video.addEventListener('canplay', handleReady);
+  });
 }

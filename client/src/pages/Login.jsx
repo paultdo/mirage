@@ -17,15 +17,16 @@ export default function LoginPage({ app }) {
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
+  const [redirectAfterAuth, setRedirectAfterAuth] = useState(false);
   const demoQueryEnabled = useMemo(() => isDemoQueryEnabled(), []);
 
   useEffect(() => {
-    if (!app.isAuthed) {
+    if (!redirectAfterAuth || !app.me) {
       return;
     }
 
     navigate(location.state?.from || '/files', { replace: true });
-  }, [app.isAuthed, location.state, navigate]);
+  }, [app.me, location.state, navigate, redirectAfterAuth]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -41,15 +42,18 @@ export default function LoginPage({ app }) {
       }
 
       const result = await login(form);
-      app.setSessionToken(result.session_token);
 
       if (result.needs_face_check) {
+        setSessionToken(result.session_token);
         setVerificationToken(result.session_token);
+        setRedirectAfterAuth(false);
         setStatus('verifying');
         return;
       }
 
+      app.setSessionToken(result.session_token);
       await app.refreshMe();
+      setRedirectAfterAuth(true);
     } catch (requestError) {
       setStatus('idle');
       setError(getAuthErrorMessage(requestError));
@@ -58,10 +62,13 @@ export default function LoginPage({ app }) {
 
   async function handleVerify(videoElement) {
     try {
-      setSessionToken(verificationToken || app.sessionToken);
+      const token = verificationToken || app.sessionToken;
+      setSessionToken(token);
       const embedding = demoQueryEnabled ? getDemoEmbedding() : await extractFaceEmbedding(videoElement);
       await verifyFace({ embedding });
+      app.setSessionToken(token);
       await app.refreshMe();
+      setRedirectAfterAuth(true);
     } catch (verificationError) {
       setError(verificationError.message || 'Unable to verify your face.');
       throw verificationError;
@@ -116,9 +123,8 @@ export default function LoginPage({ app }) {
             <Webcam
               title="Completing sign-in"
               description="A quick face check is used to continue into your workspace."
-              actionLabel="Retry verification"
+              actionLabel="Verify face"
               busyLabel="Verifying..."
-              autoCapture
               onCapture={handleVerify}
             />
           ) : (
