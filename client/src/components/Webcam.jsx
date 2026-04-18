@@ -14,46 +14,56 @@ export default function Webcam({
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
+  async function startCamera() {
+    setStatus('requesting');
+    setError('');
 
-    async function startCamera() {
-      setStatus('requesting');
-      setError('');
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
 
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'user',
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-          },
-          audio: false,
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setStatus('error');
+      setError('This browser does not support camera access.');
+      return;
+    }
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+        },
+        audio: false,
+      });
+    } catch (cameraError) {
+      setStatus('error');
+      setError(getCameraErrorMessage(cameraError));
+      return;
+    }
+
+    streamRef.current = stream;
+
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      const playPromise = videoRef.current.play();
+      if (playPromise?.catch) {
+        playPromise.catch((playError) => {
+          console.warn('Unable to autoplay webcam preview:', playError);
         });
-
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-
-        streamRef.current = stream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
-        }
-
-        setStatus('ready');
-      } catch (cameraError) {
-        setStatus('error');
-        setError('Camera access is required to continue. Check browser permissions and try again.');
       }
     }
 
+    setStatus('ready');
+  }
+
+  useEffect(() => {
     startCamera();
 
     return () => {
-      cancelled = true;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
@@ -91,19 +101,50 @@ export default function Webcam({
         <p>{description}</p>
       </div>
       <div className="camera-frame">
-        <video ref={videoRef} muted playsInline className="camera-video" />
+        <video ref={videoRef} autoPlay muted playsInline className="camera-video" />
         {status === 'requesting' ? <div className="camera-overlay">Starting camera...</div> : null}
         {status === 'capturing' ? <div className="camera-overlay">Verifying...</div> : null}
       </div>
       {error ? <p className="status-error">{error}</p> : null}
-      <button
-        type="button"
-        className="primary-button"
-        onClick={handleCapture}
-        disabled={status === 'requesting' || status === 'capturing'}
-      >
-        {status === 'capturing' ? busyLabel : actionLabel}
-      </button>
+      <div className="camera-actions">
+        <button
+          type="button"
+          className="primary-button"
+          onClick={handleCapture}
+          disabled={status === 'requesting' || status === 'capturing' || status === 'error'}
+        >
+          {status === 'capturing' ? busyLabel : actionLabel}
+        </button>
+        {status === 'error' ? (
+          <button
+            type="button"
+            className="ghost-button"
+            onClick={startCamera}
+            disabled={status === 'requesting'}
+          >
+            Retry camera
+          </button>
+        ) : null}
+      </div>
     </section>
   );
+}
+
+function getCameraErrorMessage(error) {
+  switch (error?.name) {
+    case 'NotAllowedError':
+    case 'PermissionDeniedError':
+      return 'Camera access was blocked. Allow camera access in the browser and try again.';
+    case 'NotFoundError':
+    case 'DevicesNotFoundError':
+      return 'No camera was found on this device.';
+    case 'NotReadableError':
+    case 'TrackStartError':
+      return 'The camera is busy or unavailable. Close other apps using the camera and try again.';
+    case 'OverconstrainedError':
+    case 'ConstraintNotSatisfiedError':
+      return 'The selected camera settings were not supported. Try again.';
+    default:
+      return 'Unable to start the camera. Check browser permissions and try again.';
+  }
 }

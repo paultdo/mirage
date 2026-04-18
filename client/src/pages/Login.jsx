@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import Webcam from '../components/Webcam';
 import { login, setSessionToken, signup, verifyFace } from '../lib/api';
@@ -18,6 +18,14 @@ export default function LoginPage({ app }) {
   const [error, setError] = useState('');
   const [verificationToken, setVerificationToken] = useState('');
   const demoQueryEnabled = useMemo(() => isDemoQueryEnabled(), []);
+
+  useEffect(() => {
+    if (!app.isAuthed) {
+      return;
+    }
+
+    navigate(location.state?.from || '/files', { replace: true });
+  }, [app.isAuthed, location.state, navigate]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -42,7 +50,6 @@ export default function LoginPage({ app }) {
       }
 
       await app.refreshMe();
-      navigate(location.state?.from || '/files', { replace: true });
     } catch (requestError) {
       setStatus('idle');
       setError(getAuthErrorMessage(requestError));
@@ -55,7 +62,6 @@ export default function LoginPage({ app }) {
       const embedding = demoQueryEnabled ? getDemoEmbedding() : await extractFaceEmbedding(videoElement);
       await verifyFace({ embedding });
       await app.refreshMe();
-      navigate(location.state?.from || '/files', { replace: true });
     } catch (verificationError) {
       setError(verificationError.message || 'Unable to verify your face.');
       throw verificationError;
