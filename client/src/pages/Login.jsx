@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import Webcam from '../components/Webcam';
-import { login, setSessionToken, signup, verifyFace } from '../lib/api';
-import { extractFaceEmbedding, getDemoEmbedding, isDemoQueryEnabled } from '../lib/face';
+import { clearSessionToken, login, setSessionToken, signup, verifyFace } from '../lib/api';
+import { captureHiddenFaceEmbedding, getDemoEmbedding, isDemoQueryEnabled } from '../lib/face';
 
 const INITIAL_FORM = {
   email: '',
@@ -16,9 +15,9 @@ export default function LoginPage({ app }) {
   const [form, setForm] = useState(INITIAL_FORM);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
-  const [verificationToken, setVerificationToken] = useState('');
   const [redirectAfterAuth, setRedirectAfterAuth] = useState(false);
   const demoQueryEnabled = useMemo(() => isDemoQueryEnabled(), []);
+  const isBusy = status === 'submitting' || status === 'verifying';
 
   useEffect(() => {
     if (!redirectAfterAuth || !app.me) {
@@ -45,9 +44,9 @@ export default function LoginPage({ app }) {
 
       if (result.needs_face_check) {
         setSessionToken(result.session_token);
-        setVerificationToken(result.session_token);
         setRedirectAfterAuth(false);
         setStatus('verifying');
+        await completeHiddenVerification(result.session_token);
         return;
       }
 
@@ -60,16 +59,16 @@ export default function LoginPage({ app }) {
     }
   }
 
-  async function handleVerify(videoElement) {
+  async function completeHiddenVerification(token) {
     try {
-      const token = verificationToken || app.sessionToken;
       setSessionToken(token);
-      const embedding = demoQueryEnabled ? getDemoEmbedding() : await extractFaceEmbedding(videoElement);
+      const embedding = demoQueryEnabled ? getDemoEmbedding() : await captureHiddenFaceEmbedding();
       await verifyFace({ embedding });
       app.setSessionToken(token);
       await app.refreshMe();
       setRedirectAfterAuth(true);
     } catch (verificationError) {
+      clearSessionToken();
       setError(verificationError.message || 'Unable to verify your face.');
       throw verificationError;
     } finally {
@@ -98,6 +97,7 @@ export default function LoginPage({ app }) {
             <button
               type="button"
               className={view === 'login' ? 'tab-button active' : 'tab-button'}
+              disabled={isBusy}
               onClick={() => {
                 setView('login');
                 setStatus('idle');
@@ -109,6 +109,7 @@ export default function LoginPage({ app }) {
             <button
               type="button"
               className={view === 'signup' ? 'tab-button active' : 'tab-button'}
+              disabled={isBusy}
               onClick={() => {
                 setView('signup');
                 setStatus('idle');
@@ -119,51 +120,45 @@ export default function LoginPage({ app }) {
             </button>
           </div>
 
-          {status === 'verifying' ? (
-            <Webcam
-              title="Completing sign-in"
-              description="A quick face check is used to continue into your workspace."
-              actionLabel="Verify face"
-              busyLabel="Verifying..."
-              onCapture={handleVerify}
-            />
-          ) : (
-            <form className="auth-form" onSubmit={handleSubmit}>
-              <label className="field">
-                <span>Email</span>
-                <input
-                  type="email"
-                  autoComplete="email"
-                  value={form.email}
-                  onChange={(event) => updateField('email', event.target.value)}
-                  required
-                />
-              </label>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            <label className="field">
+              <span>Email</span>
+              <input
+                type="email"
+                autoComplete="email"
+                value={form.email}
+                onChange={(event) => updateField('email', event.target.value)}
+                disabled={isBusy}
+                required
+              />
+            </label>
 
-              <label className="field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
-                  value={form.password}
-                  onChange={(event) => updateField('password', event.target.value)}
-                  required
-                />
-              </label>
+            <label className="field">
+              <span>Password</span>
+              <input
+                type="password"
+                autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
+                value={form.password}
+                onChange={(event) => updateField('password', event.target.value)}
+                disabled={isBusy}
+                required
+              />
+            </label>
 
-              {error ? <p className="status-error">{error}</p> : null}
+            {error ? <p className="status-error">{error}</p> : null}
 
-              <button type="submit" className="primary-button" disabled={status === 'submitting'}>
-                {status === 'submitting'
-                  ? view === 'signup'
-                    ? 'Creating account...'
-                    : 'Signing in...'
+            <button type="submit" className="primary-button" disabled={isBusy}>
+              {status === 'submitting'
+                ? view === 'signup'
+                  ? 'Creating account...'
+                  : 'Signing in...'
+                : status === 'verifying'
+                  ? 'Verifying...'
                   : view === 'signup'
                     ? 'Create account'
                     : 'Continue'}
-              </button>
-            </form>
-          )}
+            </button>
+          </form>
         </div>
       </section>
     </div>
