@@ -81,7 +81,21 @@ export async function captureHiddenFaceEmbedding() {
     }
 
     await waitForVideoFrame(video);
-    return await extractFaceEmbedding(video);
+
+    // Retry face detection multiple times — lighting/angle may not be ideal on first frame
+    const MAX_ATTEMPTS = 5;
+    const DELAY_MS = 800;
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        return await extractFaceEmbedding(video);
+      } catch (detectionError) {
+        if (attempt === MAX_ATTEMPTS) {
+          throw detectionError;
+        }
+        await new Promise((r) => setTimeout(r, DELAY_MS));
+      }
+    }
   } finally {
     stream.getTracks().forEach((track) => track.stop());
     video.srcObject = null;
