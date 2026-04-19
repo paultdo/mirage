@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { getFiles, uploadFile } from '../lib/api';
+import { deleteFile, getFiles, uploadFile } from '../lib/api';
 
 function formatBytes(size) {
   if (!Number.isFinite(size)) {
@@ -45,6 +45,7 @@ export default function FilesPage({ app }) {
   const [status, setStatus] = useState('loading');
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState('idle');
+  const [deleteState, setDeleteState] = useState({ status: 'idle', fileId: null });
   const [uploadError, setUploadError] = useState('');
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [coverTopic, setCoverTopic] = useState('');
@@ -125,6 +126,31 @@ export default function FilesPage({ app }) {
     }
   }
 
+  async function handleDelete(file) {
+    const confirmed = window.confirm(`Delete "${file.name}"?`);
+    if (!confirmed) {
+      return;
+    }
+
+    setUploadError('');
+    setUploadSuccess('');
+    setDeleteState({ status: 'deleting', fileId: file.id });
+
+    try {
+      await deleteFile(file.id);
+
+      if (!isDecoy) {
+        setFiles((currentFiles) => currentFiles.filter((entry) => entry.id !== file.id));
+      }
+
+      setUploadSuccess(`${isDecoy ? 'Delete request completed.' : 'File deleted successfully.'}`);
+    } catch (deleteRequestError) {
+      setUploadError(getDeleteErrorMessage(deleteRequestError));
+    } finally {
+      setDeleteState({ status: 'idle', fileId: null });
+    }
+  }
+
   return (
     <div className="workspace-shell">
       <header className="workspace-header">
@@ -197,6 +223,7 @@ export default function FilesPage({ app }) {
                       <th>Type</th>
                       <th>Size</th>
                       <th>Modified</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -210,6 +237,16 @@ export default function FilesPage({ app }) {
                         <td>{typeLabel(file.mime_type, file.name)}</td>
                         <td>{formatBytes(file.size_bytes)}</td>
                         <td>{formatDate(file.created_at)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="ghost-button row-action-button"
+                            disabled={deleteState.status === 'deleting' && deleteState.fileId === file.id}
+                            onClick={() => handleDelete(file)}
+                          >
+                            {deleteState.status === 'deleting' && deleteState.fileId === file.id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -231,4 +268,12 @@ function getUploadErrorMessage(error) {
   }
 
   return error.message || 'Unable to upload this file right now.';
+}
+
+function getDeleteErrorMessage(error) {
+  if (error.status === 404) {
+    return 'This file is no longer available.';
+  }
+
+  return error.message || 'Unable to delete this file right now.';
 }

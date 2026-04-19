@@ -392,6 +392,11 @@ a {
   background: #f7f8fa;
 }
 
+.row-action-button {
+  min-width: 84px;
+  padding: 8px 12px;
+}
+
 .file-link,
 .back-link {
   color: var(--link);

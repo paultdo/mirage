@@ -111,3 +111,9 @@ export function uploadFile({ file, coverTopic }) {
 export function getFileContent(fileId) {
   return request(`/api/files/${fileId}/content`);
 }
+
+export function deleteFile(fileId) {
+  return request(`/api/files/${fileId}`, {
+    method: 'DELETE',
+  });
+}
