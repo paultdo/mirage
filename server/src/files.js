@@ -193,12 +193,26 @@ export function deleteFile(req, res) {
   return res.json({ deleted: true });
 }
 
+function resolveRealFilename(alert, userId) {
+  if (!alert.file_id || alert.event_type === 'file_uploaded') {
+    return null;
+  }
+  const file = getFileById(alert.file_id);
+  if (!file || file.owner_id !== userId) {
+    return null;
+  }
+  return file.real_filename;
+}
+
 export function listAlerts(req, res) {
   if (req.session.mode === 'decoy') {
     return res.json({ alerts: [] });
   }
 
-  const alerts = getAlertsByUser(req.user.id);
+  const alerts = getAlertsByUser(req.user.id).map((alert) => ({
+    ...alert,
+    real_file_name: resolveRealFilename(alert, req.user.id),
+  }));
   return res.json({ alerts });
 }
 
@@ -222,6 +236,7 @@ export function getAlertDetails(req, res) {
       event_type: alert.event_type,
       file_id: alert.file_id,
       file_name: alert.file_name,
+      real_file_name: resolveRealFilename(alert, req.user.id),
       evidence_id: alert.evidence_id,
       created_at: alert.created_at,
       seen: Boolean(alert.seen),

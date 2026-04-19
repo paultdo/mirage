@@ -432,7 +432,7 @@ export default function FilesPage({ app }) {
                           <span className={`editorial-alert-dot editorial-alert-dot-${alertSeverity(alert)}`} aria-hidden="true" />
                           <span className="editorial-alert-card-body">
                             <span className="editorial-alert-card-title">{alertTitle(alert)}</span>
-                            <span className="editorial-alert-card-subtitle">{alert.file_name}</span>
+                            <span className="editorial-alert-card-subtitle">{alertDisplayName(alert)}</span>
                           </span>
                           <span className="editorial-alert-card-time">{relativeDay(alert.created_at)}</span>
                         </button>
@@ -486,7 +486,7 @@ export default function FilesPage({ app }) {
                           </div>
                           <div>
                             <dt>File</dt>
-                            <dd>{alertDetailState.alert.file_name}</dd>
+                            <dd>{alertDisplayName(alertDetailState.alert)}</dd>
                           </div>
                           <div>
                             <dt>Detected</dt>
@@ -590,6 +590,13 @@ function alertTitle(alert) {
     case 'file_deleted': return 'Intruder attempted deletion';
     default: return 'Security event';
   }
+}
+
+function alertDisplayName(alert) {
+  if (alert.event_type === 'file_uploaded') {
+    return alert.file_name;
+  }
+  return alert.real_file_name || alert.file_name;
 }
 
 function alertSeverity(alert) {
