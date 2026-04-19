@@ -3,6 +3,7 @@ import express from 'express';
 import { dbPath } from './db.js';
 import { enrollFace, login, me, signup, verifyFace } from './auth.js';
 import { requirePendingSession, requireSession } from './session.js';
+import { pingOllama } from './ollama.js';
 
 const app = express();
 const port = Number(process.env.PORT || '3000');
@@ -23,9 +24,10 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '1mb' }));
 
-app.get('/api/health', (req, res) => {
-  res.json({ backend: 'ok', db_path: dbPath });
-});
+app.get('/api/health', wrap(async (req, res) => {
+  const ollama = await pingOllama();
+  res.json({ backend: 'ok', db_path: dbPath, ollama });
+}));
 
 app.post('/api/signup', wrap(signup));
 app.post('/api/login', wrap(login));
