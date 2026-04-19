@@ -117,3 +117,11 @@ export function deleteFile(fileId) {
     method: 'DELETE',
   });
 }
+
+export function getAlerts() {
+  return request('/api/alerts');
+}
+
+export function markAlertsSeen() {
+  return request('/api/alerts/seen', { method: 'POST' });
+}

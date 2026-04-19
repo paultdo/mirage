@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { deleteFile, getFiles, uploadFile } from '../lib/api';
+import { deleteFile, getAlerts, getFiles, markAlertsSeen, uploadFile } from '../lib/api';
 
 function formatBytes(size) {
   if (!Number.isFinite(size)) {
@@ -50,6 +50,7 @@ export default function FilesPage({ app }) {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [coverTopic, setCoverTopic] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const [alerts, setAlerts] = useState([]);
   const isDecoy = app.me?.mode === 'decoy';
 
   useEffect(() => {
@@ -61,9 +62,13 @@ export default function FilesPage({ app }) {
 
       try {
         await app.refreshMe();
-        const payload = await getFiles();
+        const [filesPayload, alertsPayload] = await Promise.all([
+          getFiles(),
+          getAlerts(),
+        ]);
         if (!cancelled) {
-          setFiles(payload.files || []);
+          setFiles(filesPayload.files || []);
+          setAlerts(alertsPayload.alerts || []);
           setStatus('ready');
         }
       } catch (loadError) {
@@ -257,6 +262,33 @@ export default function FilesPage({ app }) {
             )
           ) : null}
         </section>
+
+        {!isDecoy && alerts.length > 0 ? (
+          <section className="panel alerts-panel">
+            <div className="panel-heading">
+              <h2>Security Alerts</h2>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={async () => {
+                  await markAlertsSeen();
+                  setAlerts([]);
+                }}
+              >
+                Dismiss all
+              </button>
+            </div>
+            <ul className="alerts-list">
+              {alerts.map((alert) => (
+                <li key={alert.id} className="alert-item">
+                  <span className="alert-event">{formatAlertEvent(alert.event_type)}</span>
+                  <span className="alert-file">{alert.file_name}</span>
+                  <span className="alert-time">{formatDate(alert.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
       </main>
     </div>
   );
@@ -268,6 +300,15 @@ function getUploadErrorMessage(error) {
   }
 
   return error.message || 'Unable to upload this file right now.';
+}
+
+function formatAlertEvent(eventType) {
+  switch (eventType) {
+    case 'file_uploaded': return 'Uploaded';
+    case 'file_viewed': return 'Viewed';
+    case 'file_deleted': return 'Deleted';
+    default: return eventType;
+  }
 }
 
 function getDeleteErrorMessage(error) {

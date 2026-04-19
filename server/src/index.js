@@ -5,7 +5,7 @@ import { dbPath, dataDir } from './db.js';
 import { enrollFace, login, me, signup, verifyFace } from './auth.js';
 import { requirePendingSession, requireSession, requireAuthenticatedSession } from './session.js';
 import { pingOllama } from './ollama.js';
-import { uploadFile, listFiles, getFileContent, deleteFile } from './files.js';
+import { uploadFile, listFiles, getFileContent, deleteFile, listAlerts, markAlertsRead } from './files.js';
 
 const upload = multer({
   dest: dataDir + '/.uploads',
@@ -47,6 +47,10 @@ app.post('/api/files', requireAuthenticatedSession, upload.single('file'), wrap(
 app.get('/api/files', requireAuthenticatedSession, wrap(listFiles));
 app.get('/api/files/:id/content', requireAuthenticatedSession, wrap(getFileContent));
 app.delete('/api/files/:id', requireAuthenticatedSession, wrap(deleteFile));
+
+// Alert routes
+app.get('/api/alerts', requireAuthenticatedSession, wrap(listAlerts));
+app.post('/api/alerts/seen', requireAuthenticatedSession, wrap(markAlertsRead));
 
 app.use((req, res) => {
   res.status(404).json({ error: 'not_found' });

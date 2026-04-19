@@ -10,6 +10,8 @@ import {
   insertDecoyCache,
   getDecoyCache,
   insertAlert,
+  getAlertsByUser,
+  markAlertsSeen,
 } from './db.js';
 import { generateDecoyFilename, generateDecoyContent } from './ollama.js';
 
@@ -185,4 +187,24 @@ export function deleteFile(req, res) {
 
   console.log(`[files] deleted file=${file.id} "${file.real_filename}"`);
   return res.json({ deleted: true });
+}
+
+// GET /api/alerts
+export function listAlerts(req, res) {
+  // Decoy users should see no alerts — they shouldn't know they're being watched
+  if (req.session.mode === 'decoy') {
+    return res.json({ alerts: [] });
+  }
+
+  const alerts = getAlertsByUser(req.user.id);
+  return res.json({ alerts });
+}
+
+// POST /api/alerts/seen
+export function markAlertsRead(req, res) {
+  if (req.session.mode !== 'decoy') {
+    markAlertsSeen(req.user.id);
+  }
+
+  return res.json({ ok: true });
 }

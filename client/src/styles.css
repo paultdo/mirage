@@ -424,6 +424,52 @@ a {
   line-height: 1.65;
 }
 
+.alerts-panel {
+  grid-column: 1 / -1;
+}
+
+.alerts-panel .panel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.alerts-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0;
+}
+
+.alert-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.92rem;
+}
+
+.alert-item:last-child {
+  border-bottom: none;
+}
+
+.alert-event {
+  font-weight: 600;
+  min-width: 72px;
+}
+
+.alert-file {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.alert-time {
+  color: var(--text-soft);
+  font-size: 0.84rem;
+}
+
 @media (max-width: 900px) {
   .workspace-grid {
     grid-template-columns: 1fr;
