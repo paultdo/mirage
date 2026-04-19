@@ -5,3 +5,6 @@ server/dist/
 server/data/
 .env
 *.log
+CLAUDE.md
+PLAN.md
+docs/PLAN.md

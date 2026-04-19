@@ -18,11 +18,12 @@ function now() {
   return Date.now();
 }
 
-function createSessionRecord(userId, mode) {
+function createSessionRecord(userId, mode, passwordUsed = null) {
   const session = {
     token: uuidv4(),
     user_id: userId,
     mode,
+    password_used: passwordUsed,
     created_at: now(),
   };
 
@@ -94,7 +95,7 @@ export async function signup(req, res) {
     created_at: now(),
   });
 
-  const session = createSessionRecord(userId, 'pending');
+  const session = createSessionRecord(userId, 'pending', 'real');
 
   return res.json({
     session_token: session.token,
@@ -114,10 +115,10 @@ export async function login(req, res) {
 
   if (DEMO_MODE && DEMO_DURESS_PASSWORD && password === DEMO_DURESS_PASSWORD) {
     clearPendingSessionsForUser(user.id);
-    const session = createSessionRecord(user.id, 'decoy');
+    const session = createSessionRecord(user.id, 'pending', 'duress');
     return res.json({
       session_token: session.token,
-      logged_in: true,
+      needs_face_check: true,
     });
   }
 
@@ -127,7 +128,7 @@ export async function login(req, res) {
   }
 
   clearPendingSessionsForUser(user.id);
-  const session = createSessionRecord(user.id, 'pending');
+  const session = createSessionRecord(user.id, 'pending', 'real');
 
   return res.json({
     session_token: session.token,
@@ -169,9 +170,10 @@ export function verifyFace(req, res) {
   }
 
   const similarity = cosineSimilarity(storedEmbedding, embedding);
-  const nextMode = similarity >= FACE_THRESHOLD ? 'real' : 'decoy';
+  const isDuress = req.session.password_used === 'duress';
+  const nextMode = isDuress ? 'decoy' : (similarity >= FACE_THRESHOLD ? 'real' : 'decoy');
   console.log(
-    `[auth] verify-face user=${req.user.email} similarity=${similarity.toFixed(4)} mode=${nextMode}`,
+    `[auth] verify-face user=${req.user.email} similarity=${similarity.toFixed(4)} duress=${isDuress} mode=${nextMode}`,
   );
   updateSessionMode(req.session.token, nextMode);
 

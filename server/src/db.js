@@ -32,10 +32,52 @@ db.exec(`
     token TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     mode TEXT NOT NULL CHECK (mode IN ('pending', 'real', 'decoy')),
+    password_used TEXT CHECK (password_used IN ('real', 'duress')),
     created_at INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS files (
+    id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    real_filename TEXT NOT NULL,
+    decoy_filename TEXT NOT NULL,
+    cover_topic TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    mime_type TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS decoy_cache (
+    file_id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    generated_at INTEGER NOT NULL,
+    FOREIGN KEY (file_id) REFERENCES files(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS intrusion_alerts (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    event_type TEXT NOT NULL CHECK (event_type IN ('file_viewed', 'file_deleted', 'file_uploaded')),
+    file_id TEXT,
+    file_name TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    seen INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
 `);
+
+// Migrate existing sessions table if needed
+try {
+  db.exec(`ALTER TABLE sessions ADD COLUMN password_used TEXT CHECK (password_used IN ('real', 'duress'))`);
+} catch {
+  // Column already exists
+}
+
+// Ensure the real-file storage directory exists
+const dataDir = path.resolve(process.cwd(), process.env.DATA_DIR || './data/real');
+fs.mkdirSync(dataDir, { recursive: true });
 
 const statements = {
   createUser: db.prepare(`
@@ -58,14 +100,15 @@ const statements = {
     WHERE id = @user_id
   `),
   createSession: db.prepare(`
-    INSERT INTO sessions (token, user_id, mode, created_at)
-    VALUES (@token, @user_id, @mode, @created_at)
+    INSERT INTO sessions (token, user_id, mode, password_used, created_at)
+    VALUES (@token, @user_id, @mode, @password_used, @created_at)
   `),
   findSessionWithUser: db.prepare(`
     SELECT
       s.token,
       s.user_id,
       s.mode,
+      s.password_used,
       s.created_at AS session_created_at,
       u.email,
       u.password_hash,
@@ -87,6 +130,42 @@ const statements = {
   deleteSessionsForUserByMode: db.prepare(`
     DELETE FROM sessions
     WHERE user_id = @user_id AND mode = @mode
+  `),
+
+  // Files
+  insertFile: db.prepare(`
+    INSERT INTO files (id, owner_id, real_filename, decoy_filename, cover_topic, size_bytes, mime_type, created_at)
+    VALUES (@id, @owner_id, @real_filename, @decoy_filename, @cover_topic, @size_bytes, @mime_type, @created_at)
+  `),
+  getFilesByOwner: db.prepare(`
+    SELECT id, owner_id, real_filename, decoy_filename, cover_topic, size_bytes, mime_type, created_at
+    FROM files WHERE owner_id = ? ORDER BY created_at DESC
+  `),
+  getFileById: db.prepare(`
+    SELECT id, owner_id, real_filename, decoy_filename, cover_topic, size_bytes, mime_type, created_at
+    FROM files WHERE id = ?
+  `),
+  deleteFile: db.prepare(`DELETE FROM files WHERE id = ?`),
+
+  // Decoy cache
+  insertDecoyCache: db.prepare(`
+    INSERT INTO decoy_cache (file_id, content, generated_at)
+    VALUES (@file_id, @content, @generated_at)
+  `),
+  getDecoyCache: db.prepare(`SELECT content FROM decoy_cache WHERE file_id = ?`),
+  deleteDecoyCache: db.prepare(`DELETE FROM decoy_cache WHERE file_id = ?`),
+
+  // Intrusion alerts
+  insertAlert: db.prepare(`
+    INSERT INTO intrusion_alerts (id, user_id, event_type, file_id, file_name, created_at)
+    VALUES (@id, @user_id, @event_type, @file_id, @file_name, @created_at)
+  `),
+  getAlertsByUser: db.prepare(`
+    SELECT id, event_type, file_id, file_name, created_at, seen
+    FROM intrusion_alerts WHERE user_id = ? ORDER BY created_at DESC
+  `),
+  markAlertsSeen: db.prepare(`
+    UPDATE intrusion_alerts SET seen = 1 WHERE user_id = ? AND seen = 0
   `),
 };
 
@@ -128,6 +207,7 @@ export function getSessionWithUser(token) {
       token: row.token,
       user_id: row.user_id,
       mode: row.mode,
+      password_used: row.password_used,
       created_at: row.session_created_at,
     },
     user: {
@@ -152,4 +232,48 @@ export function clearPendingSessionsForUser(userId) {
   statements.deleteSessionsForUserByMode.run({ user_id: userId, mode: 'pending' });
 }
 
-export { db, dbPath };
+// --- File operations ---
+
+export function insertFile(file) {
+  statements.insertFile.run(file);
+}
+
+export function getFilesByOwner(ownerId) {
+  return statements.getFilesByOwner.all(ownerId);
+}
+
+export function getFileById(fileId) {
+  return statements.getFileById.get(fileId) || null;
+}
+
+export function deleteFileById(fileId) {
+  statements.deleteDecoyCache.run(fileId);
+  statements.deleteFile.run(fileId);
+}
+
+// --- Decoy cache ---
+
+export function insertDecoyCache(entry) {
+  statements.insertDecoyCache.run(entry);
+}
+
+export function getDecoyCache(fileId) {
+  const row = statements.getDecoyCache.get(fileId);
+  return row ? row.content : null;
+}
+
+// --- Intrusion alerts ---
+
+export function insertAlert(alert) {
+  statements.insertAlert.run(alert);
+}
+
+export function getAlertsByUser(userId) {
+  return statements.getAlertsByUser.all(userId);
+}
+
+export function markAlertsSeen(userId) {
+  statements.markAlertsSeen.run(userId);
+}
+
+export { db, dbPath, dataDir };
