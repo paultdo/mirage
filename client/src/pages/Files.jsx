@@ -46,6 +46,7 @@ export default function FilesPage({ app }) {
   const [error, setError] = useState('');
   const [uploadState, setUploadState] = useState('idle');
   const [uploadError, setUploadError] = useState('');
+  const [uploadSuccess, setUploadSuccess] = useState('');
   const [coverTopic, setCoverTopic] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
 
@@ -80,13 +81,15 @@ export default function FilesPage({ app }) {
 
   async function handleUpload(event) {
     event.preventDefault();
+    setUploadError('');
+    setUploadSuccess('');
+
     if (!selectedFile || !coverTopic.trim()) {
       setUploadError('Choose a file and add a cover topic before uploading.');
       return;
     }
 
     setUploadState('uploading');
-    setUploadError('');
 
     try {
       await uploadFile({
@@ -100,6 +103,7 @@ export default function FilesPage({ app }) {
       setCoverTopic('');
       event.target.reset();
       setUploadState('idle');
+      setUploadSuccess('File uploaded successfully.');
     } catch (uploadRequestError) {
       setUploadState('idle');
       setUploadError(getUploadErrorMessage(uploadRequestError));
@@ -149,6 +153,7 @@ export default function FilesPage({ app }) {
             </label>
 
             {uploadError ? <p className="status-error">{uploadError}</p> : null}
+            {uploadSuccess ? <p className="status-success">{uploadSuccess}</p> : null}
 
             <button type="submit" className="primary-button" disabled={uploadState === 'uploading'}>
               {uploadState === 'uploading' ? 'Uploading...' : 'Upload file'}
