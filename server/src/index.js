@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import express from 'express';
 import multer from 'multer';
 import { dbPath, dataDir } from './db.js';
@@ -63,8 +65,13 @@ app.get('/api/alerts/:id', requireAuthenticatedSession, wrap(getAlertDetails));
 app.get('/api/alert-evidence/:id/image', requireAuthenticatedSession, wrap(getAlertEvidenceImage));
 app.post('/api/alerts/seen', requireAuthenticatedSession, wrap(markAlertsRead));
 
-app.use((req, res) => {
-  res.status(404).json({ error: 'not_found' });
+// Serve client build in production
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const clientDist = path.resolve(__dirname, '../../client/dist');
+app.use(express.static(clientDist));
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/')) return next();
+  res.sendFile(path.join(clientDist, 'index.html'));
 });
 
 app.use((error, req, res, next) => {
