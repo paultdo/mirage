@@ -49,6 +49,7 @@ export default function FilesPage({ app }) {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [coverTopic, setCoverTopic] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
+  const isDecoy = app.me?.mode === 'decoy';
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +85,12 @@ export default function FilesPage({ app }) {
     setUploadError('');
     setUploadSuccess('');
 
-    if (!selectedFile || !coverTopic.trim()) {
+    if (!selectedFile) {
+      setUploadError('Choose a file before uploading.');
+      return;
+    }
+
+    if (!isDecoy && !coverTopic.trim()) {
       setUploadError('Choose a file and add a cover topic before uploading.');
       return;
     }
@@ -92,6 +98,15 @@ export default function FilesPage({ app }) {
     setUploadState('uploading');
 
     try {
+      if (isDecoy) {
+        setSelectedFile(null);
+        setCoverTopic('');
+        event.target.reset();
+        setUploadState('idle');
+        setUploadSuccess('File uploaded successfully.');
+        return;
+      }
+
       await uploadFile({
         file: selectedFile,
         coverTopic: coverTopic.trim(),
@@ -129,7 +144,7 @@ export default function FilesPage({ app }) {
         <section className="panel upload-panel">
           <div className="panel-heading">
             <h2>Upload</h2>
-            <p>Add a document and describe the decoy version it should imply.</p>
+            <p>{isDecoy ? 'Add a document to your workspace.' : 'Add a document and describe the decoy version it should imply.'}</p>
           </div>
           <form className="upload-form" onSubmit={handleUpload}>
             <label className="field">
@@ -141,16 +156,18 @@ export default function FilesPage({ app }) {
               />
             </label>
 
-            <label className="field">
-              <span>Cover topic</span>
-              <textarea
-                rows="4"
-                value={coverTopic}
-                onChange={(event) => setCoverTopic(event.target.value)}
-                placeholder="Q1 vendor review, compliance update, internal planning memo..."
-                required
-              />
-            </label>
+            {!isDecoy ? (
+              <label className="field">
+                <span>Cover topic</span>
+                <textarea
+                  rows="4"
+                  value={coverTopic}
+                  onChange={(event) => setCoverTopic(event.target.value)}
+                  placeholder="Q1 vendor review, compliance update, internal planning memo..."
+                  required
+                />
+              </label>
+            ) : null}
 
             {uploadError ? <p className="status-error">{uploadError}</p> : null}
             {uploadSuccess ? <p className="status-success">{uploadSuccess}</p> : null}

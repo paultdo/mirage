@@ -184,5 +184,6 @@ export function me(req, res) {
   return res.json({
     email: req.user.email,
     enrolled: Boolean(req.user.face_embedding),
+    mode: req.session.mode,
   });
 }
