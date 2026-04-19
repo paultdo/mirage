@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import HomePage from './pages/Home';
 import LoginPage from './pages/Login';
 import EnrollPage from './pages/Enroll';
 import FilesPage from './pages/Files';
@@ -15,7 +16,7 @@ function RequireAuth({ isAuthed, children }) {
   const location = useLocation();
 
   if (!isAuthed) {
-    return <Navigate to="/" replace state={{ from: location.pathname }} />;
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
   return children;
@@ -59,7 +60,8 @@ function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapStat
     }
   }, [bootstrapState, location.pathname, navigate]);
 
-  if (!isReady && location.pathname !== '/') {
+  const publicPaths = ['/', '/login', '/signup'];
+  if (!isReady && !publicPaths.includes(location.pathname)) {
     return (
       <div className="app-loading-shell">
         <div className="app-loading-panel">
@@ -72,7 +74,9 @@ function AppShell({ sessionToken, setSessionTokenState, me, setMe, bootstrapStat
 
   return (
     <Routes>
-      <Route path="/" element={<LoginPage app={appContext} />} />
+      <Route path="/" element={<HomePage app={appContext} />} />
+      <Route path="/login" element={<LoginPage app={appContext} mode="login" />} />
+      <Route path="/signup" element={<LoginPage app={appContext} mode="signup" />} />
       <Route
         path="/enroll"
         element={(

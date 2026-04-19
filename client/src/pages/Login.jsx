@@ -8,16 +8,23 @@ const INITIAL_FORM = {
   password: '',
 };
 
-export default function LoginPage({ app }) {
+export default function LoginPage({ app, mode = 'login' }) {
   const navigate = useNavigate();
   const location = useLocation();
-  const [view, setView] = useState('login');
+  const [view, setView] = useState(mode);
   const [form, setForm] = useState(INITIAL_FORM);
   const [status, setStatus] = useState('idle');
   const [error, setError] = useState('');
   const [redirectAfterAuth, setRedirectAfterAuth] = useState(false);
   const demoQueryEnabled = useMemo(() => isDemoQueryEnabled(), []);
   const isBusy = status === 'submitting' || status === 'verifying';
+  const isSignup = view === 'signup';
+
+  useEffect(() => {
+    setView(mode);
+    setStatus('idle');
+    setError('');
+  }, [mode]);
 
   useEffect(() => {
     if (!redirectAfterAuth || !app.me) {
@@ -33,7 +40,7 @@ export default function LoginPage({ app }) {
     setError('');
 
     try {
-      if (view === 'signup') {
+      if (isSignup) {
         const result = await signup(form);
         app.setSessionToken(result.session_token);
         navigate('/enroll');
@@ -85,84 +92,94 @@ export default function LoginPage({ app }) {
     }));
   }
 
+  function swapMode() {
+    const next = isSignup ? 'login' : 'signup';
+    setView(next);
+    setStatus('idle');
+    setError('');
+    navigate(next === 'signup' ? '/signup' : '/login', { replace: true });
+  }
+
+  const submitLabel = (() => {
+    if (status === 'submitting') return isSignup ? 'Creating...' : 'Signing in...';
+    if (status === 'verifying') return 'Verifying...';
+    return isSignup ? 'Create account' : 'Log in';
+  })();
+
   return (
-    <div className="auth-shell">
-      <section className="auth-panel">
-        <div className="brand-block">
-          <div className="brand-mark">Mirage</div>
-          <h1>Secure document access</h1>
-          <p>Access your files through a quiet, familiar workflow. No extra mode indicators. No extra noise.</p>
-        </div>
+    <div className="editorial-shell">
+      <div className="editorial-vignette" aria-hidden="true" />
+      <main className="editorial-card">
+        <header className="editorial-header">
+          <h1 className="editorial-wordmark">Mirage</h1>
+          <p className="editorial-eyebrow">
+            {isSignup ? 'Create your archive' : 'Welcome back'}
+          </p>
+        </header>
 
-        <div className="auth-card">
-          <div className="auth-tabs" role="tablist" aria-label="Authentication mode">
-            <button
-              type="button"
-              className={view === 'login' ? 'tab-button active' : 'tab-button'}
+        <form className="editorial-form" onSubmit={handleSubmit}>
+          <label className="editorial-field">
+            <span className="editorial-label">Email address</span>
+            <input
+              type="email"
+              autoComplete="email"
+              value={form.email}
+              onChange={(event) => updateField('email', event.target.value)}
               disabled={isBusy}
-              onClick={() => {
-                setView('login');
-                setStatus('idle');
-                setError('');
-              }}
-            >
-              Log in
-            </button>
-            <button
-              type="button"
-              className={view === 'signup' ? 'tab-button active' : 'tab-button'}
+              placeholder="you@example.com"
+              required
+            />
+          </label>
+
+          <label className="editorial-field">
+            <span className="editorial-label">Password</span>
+            <input
+              type="password"
+              autoComplete={isSignup ? 'new-password' : 'current-password'}
+              value={form.password}
+              onChange={(event) => updateField('password', event.target.value)}
               disabled={isBusy}
-              onClick={() => {
-                setView('signup');
-                setStatus('idle');
-                setError('');
-              }}
-            >
-              Sign up
-            </button>
-          </div>
+              placeholder="••••••••••••"
+              required
+            />
+          </label>
 
-          <form className="auth-form" onSubmit={handleSubmit}>
-            <label className="field">
-              <span>Email</span>
-              <input
-                type="email"
-                autoComplete="email"
-                value={form.email}
-                onChange={(event) => updateField('email', event.target.value)}
-                disabled={isBusy}
-                required
-              />
-            </label>
+          {error ? <p className="editorial-error">{error}</p> : null}
 
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                autoComplete={view === 'signup' ? 'new-password' : 'current-password'}
-                value={form.password}
-                onChange={(event) => updateField('password', event.target.value)}
-                disabled={isBusy}
-                required
-              />
-            </label>
+          <button type="submit" className="editorial-submit" disabled={isBusy}>
+            {submitLabel}
+          </button>
+        </form>
 
-            {error ? <p className="status-error">{error}</p> : null}
+        <p className="editorial-switch">
+          {isSignup ? 'Already have an account? ' : 'Need an account? '}
+          <button
+            type="button"
+            className="editorial-link"
+            disabled={isBusy}
+            onClick={swapMode}
+          >
+            {isSignup ? 'Log in' : 'Create one'}
+          </button>
+        </p>
 
-            <button type="submit" className="primary-button" disabled={isBusy}>
-              {status === 'submitting'
-                ? view === 'signup'
-                  ? 'Creating account...'
-                  : 'Signing in...'
-                : status === 'verifying'
-                  ? 'Verifying...'
-                  : view === 'signup'
-                    ? 'Create account'
-                    : 'Continue'}
-            </button>
-          </form>
-        </div>
-      </section>
+        <p className="editorial-badge">
+          <svg
+            className="editorial-badge-icon"
+            viewBox="0 0 14 14"
+            aria-hidden="true"
+          >
+            <path
+              d="M7 1 L12 3 V7 C12 9.5 10 11.5 7 13 C4 11.5 2 9.5 2 7 V3 Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="0.8"
+              strokeLinejoin="round"
+            />
+          </svg>
+          End-to-end encryption
+        </p>
+      </main>
     </div>
   );
 }

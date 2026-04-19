@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 export default function Webcam({
-  title,
   description,
   actionLabel,
   busyLabel,
@@ -104,21 +103,28 @@ export default function Webcam({
   }, [autoCapture, status]);
 
   return (
-    <section className="camera-panel">
-      <div className="camera-copy">
-        <h2>{title}</h2>
-        <p>{description}</p>
+    <section className="editorial-capture">
+      {description ? <p className="editorial-capture-caption">{description}</p> : null}
+      <div className="editorial-capture-frame">
+        <video ref={videoRef} autoPlay muted playsInline className="editorial-capture-video" />
+        {status === 'requesting' ? (
+          <div className="editorial-capture-overlay">
+            <span className="editorial-capture-overlay-dot" aria-hidden="true" />
+            Starting camera
+          </div>
+        ) : null}
+        {status === 'capturing' ? (
+          <div className="editorial-capture-overlay">
+            <span className="editorial-capture-overlay-dot" aria-hidden="true" />
+            Verifying
+          </div>
+        ) : null}
       </div>
-      <div className="camera-frame">
-        <video ref={videoRef} autoPlay muted playsInline className="camera-video" />
-        {status === 'requesting' ? <div className="camera-overlay">Starting camera...</div> : null}
-        {status === 'capturing' ? <div className="camera-overlay">Verifying...</div> : null}
-      </div>
-      {error ? <p className="status-error">{error}</p> : null}
-      <div className="camera-actions">
+      {error ? <p className="editorial-error">{error}</p> : null}
+      <div className="editorial-capture-actions">
         <button
           type="button"
-          className="primary-button"
+          className="editorial-submit"
           onClick={handleCapture}
           disabled={status === 'requesting' || status === 'capturing' || status === 'error'}
         >
@@ -127,7 +133,7 @@ export default function Webcam({
         {status === 'error' ? (
           <button
             type="button"
-            className="ghost-button"
+            className="editorial-ghost"
             onClick={startCamera}
             disabled={status === 'requesting'}
           >

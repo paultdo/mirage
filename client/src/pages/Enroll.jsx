@@ -19,24 +19,40 @@ export default function EnrollPage({ app }) {
   }
 
   return (
-    <div className="screen-shell">
-      <header className="screen-header">
-        <div>
-          <div className="brand-mark">Mirage</div>
-          <h1>Face enrollment</h1>
-          <p>Complete a one-time enrollment to finish setting up your workspace.</p>
-        </div>
-      </header>
+    <div className="editorial-shell">
+      <div className="editorial-vignette" aria-hidden="true" />
+      <main className="editorial-capture-card">
+        <header className="editorial-header">
+          <h1 className="editorial-wordmark">Mirage</h1>
+          <p className="editorial-eyebrow">Face enrollment</p>
+        </header>
 
-      <Webcam
-        title="Capture enrollment sample"
-        description="Center your face in frame and capture a clear image in steady lighting."
-        actionLabel="Capture face"
-        busyLabel="Saving..."
-        onCapture={handleEnroll}
-      />
+        <Webcam
+          description="Center your face in frame and capture in steady lighting. This happens once."
+          actionLabel="Capture face"
+          busyLabel="Saving..."
+          onCapture={handleEnroll}
+        />
 
-      {message ? <p className="status-success centered-status">{message}</p> : null}
+        {message ? <p className="editorial-status-success">{message}</p> : null}
+
+        <p className="editorial-badge">
+          <svg
+            className="editorial-badge-icon"
+            viewBox="0 0 14 14"
+            aria-hidden="true"
+          >
+            <path
+              d="M7 1 L12 3 V7 C12 9.5 10 11.5 7 13 C4 11.5 2 9.5 2 7 V3 Z"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="0.8"
+              strokeLinejoin="round"
+            />
+          </svg>
+          Stored on-device · One-time enrollment
+        </p>
+      </main>
     </div>
   );
 }
