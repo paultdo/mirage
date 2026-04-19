@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Webcam from '../components/Webcam';
-import { enrollFace } from '../lib/api';
+import { enrollFace, verifyFace } from '../lib/api';
 import { extractFaceEmbedding, getDemoEmbedding, isDemoQueryEnabled } from '../lib/face';
 
 export default function EnrollPage({ app }) {
@@ -12,6 +12,7 @@ export default function EnrollPage({ app }) {
   async function handleEnroll(videoElement) {
     const embedding = demoQueryEnabled ? getDemoEmbedding() : await extractFaceEmbedding(videoElement);
     await enrollFace({ embedding });
+    await verifyFace({ embedding });
     await app.refreshMe();
     setMessage('Face enrolled. Redirecting to files...');
     navigate('/files', { replace: true });
