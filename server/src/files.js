@@ -3,20 +3,22 @@ import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import {
   dataDir,
-  insertFile,
-  getFilesByOwner,
-  getFileById,
   deleteFileById,
-  insertDecoyCache,
-  getDecoyCache,
-  insertAlert,
+  getAlertByIdForUser,
   getAlertsByUser,
+  getDecoyEvidenceByIdForUser,
+  getDecoyEvidenceBySessionToken,
+  getDecoyCache,
+  getFileById,
+  getFilesByOwner,
+  insertAlert,
+  insertDecoyCache,
+  insertFile,
   markAlertsSeen,
 } from './db.js';
-import { generateDecoyFilename, generateDecoyContent } from './ollama.js';
+import { generateDecoyContent, generateDecoyFilename } from './ollama.js';
 
 function sanitizeFilename(filename) {
-  // Strip path traversal and keep only the basename
   return path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
@@ -24,7 +26,14 @@ function filePath(fileId, filename) {
   return path.join(dataDir, `${fileId}_${sanitizeFilename(filename)}`);
 }
 
-// POST /api/files
+function getSessionEvidenceId(sessionToken) {
+  return getDecoyEvidenceBySessionToken(sessionToken)?.id || null;
+}
+
+function buildEvidenceImageUrl(evidenceId) {
+  return `/api/alert-evidence/${evidenceId}/image`;
+}
+
 export async function uploadFile(req, res) {
   if (!req.file) {
     return res.status(400).json({ error: 'no_file' });
@@ -41,9 +50,8 @@ export async function uploadFile(req, res) {
   const sizeBytes = req.file.size;
   const now = Date.now();
 
-  // Decoy mode: accept upload, return fake success, discard actual file, log alert
   if (req.session.mode === 'decoy') {
-    // Delete the temp file multer saved — don't persist the real data
+    const evidenceId = getSessionEvidenceId(req.session.token);
     fs.unlink(req.file.path, () => {});
 
     insertAlert({
@@ -52,6 +60,7 @@ export async function uploadFile(req, res) {
       event_type: 'file_uploaded',
       file_id: fileId,
       file_name: realFilename,
+      evidence_id: evidenceId,
       created_at: now,
     });
 
@@ -64,11 +73,9 @@ export async function uploadFile(req, res) {
     });
   }
 
-  // Real mode: save file, generate decoy, store in DB
   const destPath = filePath(fileId, realFilename);
   fs.renameSync(req.file.path, destPath);
 
-  // Generate decoy filename + content via Ollama (with fallback)
   const decoyFilename = await generateDecoyFilename(coverTopic);
   const decoyContent = await generateDecoyContent(coverTopic, decoyFilename);
 
@@ -100,7 +107,6 @@ export async function uploadFile(req, res) {
   });
 }
 
-// GET /api/files
 export function listFiles(req, res) {
   const rows = getFilesByOwner(req.user.id);
   const isDecoy = req.session.mode === 'decoy';
@@ -116,7 +122,6 @@ export function listFiles(req, res) {
   return res.json({ files });
 }
 
-// GET /api/files/:id/content
 export function getFileContent(req, res) {
   const file = getFileById(req.params.id);
 
@@ -127,13 +132,15 @@ export function getFileContent(req, res) {
   const isDecoy = req.session.mode === 'decoy';
 
   if (isDecoy) {
-    // Log that someone viewed this file in decoy mode
+    const evidenceId = getSessionEvidenceId(req.session.token);
+
     insertAlert({
       id: uuidv4(),
       user_id: req.user.id,
       event_type: 'file_viewed',
       file_id: file.id,
       file_name: file.decoy_filename,
+      evidence_id: evidenceId,
       created_at: Date.now(),
     });
 
@@ -142,13 +149,10 @@ export function getFileContent(req, res) {
       return res.type('text/plain').send(cached);
     }
 
-    // Fallback if cache is somehow missing
     return res.type('text/plain').send('Document content is being prepared.');
   }
 
-  // Real mode: serve actual file from disk
   const realPath = filePath(file.id, file.real_filename);
-
   if (!fs.existsSync(realPath)) {
     return res.status(404).json({ error: 'file_missing' });
   }
@@ -156,7 +160,6 @@ export function getFileContent(req, res) {
   return res.type(file.mime_type).sendFile(realPath);
 }
 
-// DELETE /api/files/:id
 export function deleteFile(req, res) {
   const file = getFileById(req.params.id);
 
@@ -167,31 +170,30 @@ export function deleteFile(req, res) {
   const isDecoy = req.session.mode === 'decoy';
 
   if (isDecoy) {
-    // Don't actually delete — log alert and return success
+    const evidenceId = getSessionEvidenceId(req.session.token);
+
     insertAlert({
       id: uuidv4(),
       user_id: req.user.id,
       event_type: 'file_deleted',
       file_id: file.id,
       file_name: file.decoy_filename,
+      evidence_id: evidenceId,
       created_at: Date.now(),
     });
 
     return res.json({ deleted: true });
   }
 
-  // Real mode: actually delete
   const realPath = filePath(file.id, file.real_filename);
-  fs.unlink(realPath, () => {}); // best-effort disk cleanup
+  fs.unlink(realPath, () => {});
   deleteFileById(file.id);
 
   console.log(`[files] deleted file=${file.id} "${file.real_filename}"`);
   return res.json({ deleted: true });
 }
 
-// GET /api/alerts
 export function listAlerts(req, res) {
-  // Decoy users should see no alerts — they shouldn't know they're being watched
   if (req.session.mode === 'decoy') {
     return res.json({ alerts: [] });
   }
@@ -200,7 +202,54 @@ export function listAlerts(req, res) {
   return res.json({ alerts });
 }
 
-// POST /api/alerts/seen
+export function getAlertDetails(req, res) {
+  if (req.session.mode === 'decoy') {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const alert = getAlertByIdForUser(req.params.id, req.user.id);
+  if (!alert) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const evidence = alert.evidence_id
+    ? getDecoyEvidenceByIdForUser(alert.evidence_id, req.user.id)
+    : null;
+
+  return res.json({
+    alert: {
+      id: alert.id,
+      event_type: alert.event_type,
+      file_id: alert.file_id,
+      file_name: alert.file_name,
+      evidence_id: alert.evidence_id,
+      created_at: alert.created_at,
+      seen: Boolean(alert.seen),
+    },
+    evidence: evidence
+      ? {
+        id: evidence.id,
+        captured_at: evidence.captured_at,
+        mime_type: evidence.mime_type,
+        image_url: buildEvidenceImageUrl(evidence.id),
+      }
+      : null,
+  });
+}
+
+export function getAlertEvidenceImage(req, res) {
+  if (req.session.mode === 'decoy') {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  const evidence = getDecoyEvidenceByIdForUser(req.params.id, req.user.id);
+  if (!evidence || !fs.existsSync(evidence.image_path)) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  return res.type(evidence.mime_type).sendFile(evidence.image_path);
+}
+
 export function markAlertsRead(req, res) {
   if (req.session.mode !== 'decoy') {
     markAlertsSeen(req.user.id);

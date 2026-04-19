@@ -62,9 +62,21 @@ db.exec(`
     event_type TEXT NOT NULL CHECK (event_type IN ('file_viewed', 'file_deleted', 'file_uploaded')),
     file_id TEXT,
     file_name TEXT NOT NULL,
+    evidence_id TEXT,
     created_at INTEGER NOT NULL,
     seen INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS decoy_evidence (
+    id TEXT PRIMARY KEY,
+    session_token TEXT UNIQUE NOT NULL,
+    user_id TEXT NOT NULL,
+    image_path TEXT NOT NULL,
+    mime_type TEXT NOT NULL,
+    captured_at INTEGER NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_token) REFERENCES sessions(token) ON DELETE CASCADE
   );
 `);
 
@@ -75,9 +87,17 @@ try {
   // Column already exists
 }
 
+try {
+  db.exec(`ALTER TABLE intrusion_alerts ADD COLUMN evidence_id TEXT`);
+} catch {
+  // Column already exists
+}
+
 // Ensure the real-file storage directory exists
 const dataDir = path.resolve(process.cwd(), process.env.DATA_DIR || './data/real');
 fs.mkdirSync(dataDir, { recursive: true });
+const evidenceDir = path.resolve(process.cwd(), process.env.EVIDENCE_DIR || './data/evidence');
+fs.mkdirSync(evidenceDir, { recursive: true });
 
 const statements = {
   createUser: db.prepare(`
@@ -157,15 +177,34 @@ const statements = {
 
   // Intrusion alerts
   insertAlert: db.prepare(`
-    INSERT INTO intrusion_alerts (id, user_id, event_type, file_id, file_name, created_at)
-    VALUES (@id, @user_id, @event_type, @file_id, @file_name, @created_at)
+    INSERT INTO intrusion_alerts (id, user_id, event_type, file_id, file_name, evidence_id, created_at)
+    VALUES (@id, @user_id, @event_type, @file_id, @file_name, @evidence_id, @created_at)
   `),
   getAlertsByUser: db.prepare(`
-    SELECT id, event_type, file_id, file_name, created_at, seen
+    SELECT id, event_type, file_id, file_name, evidence_id, created_at, seen
     FROM intrusion_alerts WHERE user_id = ? ORDER BY created_at DESC
+  `),
+  getAlertByIdForUser: db.prepare(`
+    SELECT id, user_id, event_type, file_id, file_name, evidence_id, created_at, seen
+    FROM intrusion_alerts
+    WHERE id = ? AND user_id = ?
   `),
   markAlertsSeen: db.prepare(`
     UPDATE intrusion_alerts SET seen = 1 WHERE user_id = ? AND seen = 0
+  `),
+  insertDecoyEvidence: db.prepare(`
+    INSERT OR REPLACE INTO decoy_evidence (id, session_token, user_id, image_path, mime_type, captured_at)
+    VALUES (@id, @session_token, @user_id, @image_path, @mime_type, @captured_at)
+  `),
+  getDecoyEvidenceBySessionToken: db.prepare(`
+    SELECT id, session_token, user_id, image_path, mime_type, captured_at
+    FROM decoy_evidence
+    WHERE session_token = ?
+  `),
+  getDecoyEvidenceByIdForUser: db.prepare(`
+    SELECT id, session_token, user_id, image_path, mime_type, captured_at
+    FROM decoy_evidence
+    WHERE id = ? AND user_id = ?
   `),
 };
 
@@ -272,8 +311,24 @@ export function getAlertsByUser(userId) {
   return statements.getAlertsByUser.all(userId);
 }
 
+export function getAlertByIdForUser(alertId, userId) {
+  return statements.getAlertByIdForUser.get(alertId, userId) || null;
+}
+
 export function markAlertsSeen(userId) {
   statements.markAlertsSeen.run(userId);
 }
 
-export { db, dbPath, dataDir };
+export function insertDecoyEvidence(evidence) {
+  statements.insertDecoyEvidence.run(evidence);
+}
+
+export function getDecoyEvidenceBySessionToken(sessionToken) {
+  return statements.getDecoyEvidenceBySessionToken.get(sessionToken) || null;
+}
+
+export function getDecoyEvidenceByIdForUser(evidenceId, userId) {
+  return statements.getDecoyEvidenceByIdForUser.get(evidenceId, userId) || null;
+}
+
+export { db, dbPath, dataDir, evidenceDir };

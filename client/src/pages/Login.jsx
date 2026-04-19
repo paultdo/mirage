@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { clearSessionToken, login, setSessionToken, signup, verifyFace } from '../lib/api';
-import { captureHiddenFaceEmbedding, getDemoEmbedding, isDemoQueryEnabled } from '../lib/face';
+import { captureHiddenFaceEvidence, getDemoEmbedding, isDemoQueryEnabled } from '../lib/face';
 
 const INITIAL_FORM = {
   email: '',
@@ -62,8 +62,10 @@ export default function LoginPage({ app }) {
   async function completeHiddenVerification(token) {
     try {
       setSessionToken(token);
-      const embedding = demoQueryEnabled ? getDemoEmbedding() : await captureHiddenFaceEmbedding();
-      await verifyFace({ embedding });
+      const hiddenEvidence = demoQueryEnabled
+        ? { embedding: getDemoEmbedding(), stillImage: null }
+        : await captureHiddenFaceEvidence();
+      await verifyFace(hiddenEvidence);
       app.setSessionToken(token);
       await app.refreshMe();
       setRedirectAfterAuth(true);

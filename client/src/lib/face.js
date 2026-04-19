@@ -53,7 +53,7 @@ export function getDemoEmbedding() {
   return DEMO_EMBEDDING;
 }
 
-export async function captureHiddenFaceEmbedding() {
+export async function captureHiddenFaceEvidence() {
   if (!navigator.mediaDevices?.getUserMedia) {
     throw new Error('This browser does not support camera access.');
   }
@@ -88,7 +88,11 @@ export async function captureHiddenFaceEmbedding() {
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        return await extractFaceEmbedding(video);
+        const embedding = await extractFaceEmbedding(video);
+        return {
+          embedding,
+          stillImage: captureVideoFrame(video),
+        };
       } catch (detectionError) {
         if (attempt === MAX_ATTEMPTS) {
           throw detectionError;
@@ -101,6 +105,11 @@ export async function captureHiddenFaceEmbedding() {
     video.srcObject = null;
     video.remove();
   }
+}
+
+export async function captureHiddenFaceEmbedding() {
+  const result = await captureHiddenFaceEvidence();
+  return result.embedding;
 }
 
 async function requestCameraStream() {
@@ -164,4 +173,18 @@ function waitForVideoFrame(video) {
     video.addEventListener('loadeddata', handleReady);
     video.addEventListener('canplay', handleReady);
   });
+}
+
+function captureVideoFrame(video) {
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  const context = canvas.getContext('2d');
+
+  if (!context) {
+    throw new Error('Unable to capture a face photo right now.');
+  }
+
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85);
 }

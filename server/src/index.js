@@ -5,7 +5,16 @@ import { dbPath, dataDir } from './db.js';
 import { enrollFace, login, me, signup, verifyFace } from './auth.js';
 import { requirePendingSession, requireSession, requireAuthenticatedSession } from './session.js';
 import { pingOllama } from './ollama.js';
-import { uploadFile, listFiles, getFileContent, deleteFile, listAlerts, markAlertsRead } from './files.js';
+import {
+  uploadFile,
+  listFiles,
+  getFileContent,
+  deleteFile,
+  listAlerts,
+  getAlertDetails,
+  getAlertEvidenceImage,
+  markAlertsRead,
+} from './files.js';
 
 const upload = multer({
   dest: dataDir + '/.uploads',
@@ -29,7 +38,7 @@ app.use((req, res, next) => {
   return next();
 });
 
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '5mb' }));
 
 app.get('/api/health', wrap(async (req, res) => {
   const ollama = await pingOllama();
@@ -50,6 +59,8 @@ app.delete('/api/files/:id', requireAuthenticatedSession, wrap(deleteFile));
 
 // Alert routes
 app.get('/api/alerts', requireAuthenticatedSession, wrap(listAlerts));
+app.get('/api/alerts/:id', requireAuthenticatedSession, wrap(getAlertDetails));
+app.get('/api/alert-evidence/:id/image', requireAuthenticatedSession, wrap(getAlertEvidenceImage));
 app.post('/api/alerts/seen', requireAuthenticatedSession, wrap(markAlertsRead));
 
 app.use((req, res) => {

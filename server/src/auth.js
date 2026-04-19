@@ -1,11 +1,15 @@
 import 'dotenv/config';
+import fs from 'node:fs';
+import path from 'node:path';
 import bcrypt from 'bcrypt';
 import { v4 as uuidv4 } from 'uuid';
 import {
   clearPendingSessionsForUser,
   createSession,
   createUser,
+  evidenceDir,
   findUserByEmail,
+  insertDecoyEvidence,
   setFaceEmbedding,
   updateSessionMode,
 } from './db.js';
@@ -48,6 +52,49 @@ export function validateEmbedding(embedding) {
   }
 
   return normalized;
+}
+
+function parseStillImage(stillImage) {
+  if (!stillImage) {
+    return null;
+  }
+
+  const value = String(stillImage);
+  const match = value.match(/^data:(image\/(?:png|jpeg));base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) {
+    throw new Error('invalid_still_image');
+  }
+
+  const [, mimeType, encoded] = match;
+  const buffer = Buffer.from(encoded, 'base64');
+  if (!buffer.length) {
+    throw new Error('invalid_still_image');
+  }
+
+  return { mimeType, buffer };
+}
+
+function saveDecoyEvidence(sessionToken, userId, stillImage) {
+  const parsed = parseStillImage(stillImage);
+  if (!parsed) {
+    return null;
+  }
+
+  const evidenceId = uuidv4();
+  const extension = parsed.mimeType === 'image/png' ? '.png' : '.jpg';
+  const imagePath = path.join(evidenceDir, `${evidenceId}${extension}`);
+
+  fs.writeFileSync(imagePath, parsed.buffer);
+  insertDecoyEvidence({
+    id: evidenceId,
+    session_token: sessionToken,
+    user_id: userId,
+    image_path: imagePath,
+    mime_type: parsed.mimeType,
+    captured_at: now(),
+  });
+
+  return evidenceId;
 }
 
 export function cosineSimilarity(left, right) {
@@ -172,6 +219,19 @@ export function verifyFace(req, res) {
   const similarity = cosineSimilarity(storedEmbedding, embedding);
   const isDuress = req.session.password_used === 'duress';
   const nextMode = isDuress ? 'decoy' : (similarity >= FACE_THRESHOLD ? 'real' : 'decoy');
+
+  if (nextMode === 'decoy') {
+    try {
+      saveDecoyEvidence(req.session.token, req.user.id, req.body?.still_image);
+    } catch (error) {
+      if (error.message === 'invalid_still_image') {
+        return res.status(400).json({ error: 'invalid_still_image' });
+      }
+
+      throw error;
+    }
+  }
+
   console.log(
     `[auth] verify-face user=${req.user.email} similarity=${similarity.toFixed(4)} duress=${isDuress} mode=${nextMode}`,
   );

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { deleteFile, getAlerts, getFiles, markAlertsSeen, uploadFile } from '../lib/api';
+import {
+  deleteFile,
+  getAlertDetails,
+  getAlertEvidenceImageUrl,
+  getAlerts,
+  getFiles,
+  markAlertsSeen,
+  uploadFile,
+} from '../lib/api';
 
 function formatBytes(size) {
   if (!Number.isFinite(size)) {
@@ -51,6 +59,14 @@ export default function FilesPage({ app }) {
   const [coverTopic, setCoverTopic] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [selectedAlertId, setSelectedAlertId] = useState(null);
+  const [alertDetailState, setAlertDetailState] = useState({
+    status: 'idle',
+    alert: null,
+    evidence: null,
+    imageUrl: '',
+    error: '',
+  });
   const isDecoy = app.me?.mode === 'decoy';
 
   useEffect(() => {
@@ -85,6 +101,12 @@ export default function FilesPage({ app }) {
       cancelled = true;
     };
   }, [app.sessionToken]);
+
+  useEffect(() => () => {
+    if (alertDetailState.imageUrl) {
+      URL.revokeObjectURL(alertDetailState.imageUrl);
+    }
+  }, [alertDetailState.imageUrl]);
 
   async function handleUpload(event) {
     event.preventDefault();
@@ -153,6 +175,48 @@ export default function FilesPage({ app }) {
       setUploadError(getDeleteErrorMessage(deleteRequestError));
     } finally {
       setDeleteState({ status: 'idle', fileId: null });
+    }
+  }
+
+  async function handleAlertClick(alertId) {
+    const activeAlert = alerts.find((entry) => entry.id === alertId) || null;
+
+    if (alertDetailState.imageUrl) {
+      URL.revokeObjectURL(alertDetailState.imageUrl);
+    }
+
+    setSelectedAlertId(alertId);
+    setAlertDetailState({
+      status: 'loading',
+      alert: activeAlert,
+      evidence: null,
+      imageUrl: '',
+      error: '',
+    });
+
+    try {
+      const payload = await getAlertDetails(alertId);
+      let imageUrl = '';
+
+      if (payload.evidence?.id) {
+        imageUrl = await getAlertEvidenceImageUrl(payload.evidence.id);
+      }
+
+      setAlertDetailState({
+        status: 'ready',
+        alert: payload.alert,
+        evidence: payload.evidence,
+        imageUrl,
+        error: '',
+      });
+    } catch (detailError) {
+      setAlertDetailState({
+        status: 'error',
+        alert: activeAlert,
+        evidence: null,
+        imageUrl: '',
+        error: detailError.message || 'Unable to load alert details.',
+      });
     }
   }
 
@@ -271,22 +335,80 @@ export default function FilesPage({ app }) {
                 type="button"
                 className="ghost-button"
                 onClick={async () => {
+                  if (alertDetailState.imageUrl) {
+                    URL.revokeObjectURL(alertDetailState.imageUrl);
+                  }
                   await markAlertsSeen();
                   setAlerts([]);
+                  setSelectedAlertId(null);
+                  setAlertDetailState({
+                    status: 'idle',
+                    alert: null,
+                    evidence: null,
+                    imageUrl: '',
+                    error: '',
+                  });
                 }}
               >
                 Dismiss all
               </button>
             </div>
-            <ul className="alerts-list">
-              {alerts.map((alert) => (
-                <li key={alert.id} className="alert-item">
-                  <span className="alert-event">{formatAlertEvent(alert.event_type)}</span>
-                  <span className="alert-file">{alert.file_name}</span>
-                  <span className="alert-time">{formatDate(alert.created_at)}</span>
-                </li>
-              ))}
-            </ul>
+            <div className="alerts-content">
+              <ul className="alerts-list">
+                {alerts.map((alert) => (
+                  <li key={alert.id}>
+                    <button
+                      type="button"
+                      className={selectedAlertId === alert.id ? 'alert-item alert-item-button active' : 'alert-item alert-item-button'}
+                      onClick={() => handleAlertClick(alert.id)}
+                    >
+                      <span className="alert-event">{formatAlertEvent(alert.event_type)}</span>
+                      <span className="alert-file">{alert.file_name}</span>
+                      <span className="alert-time">{formatDate(alert.created_at)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <aside className="alerts-detail">
+                <h3>Alert Details</h3>
+                {alertDetailState.status === 'idle' ? <p className="panel-status">Select an alert to inspect the intruder evidence.</p> : null}
+                {alertDetailState.status === 'loading' ? <p className="panel-status">Loading alert details...</p> : null}
+                {alertDetailState.status === 'error' ? <p className="status-error">{alertDetailState.error}</p> : null}
+                {alertDetailState.alert ? (
+                  <div className="alert-detail-body">
+                    <div className="alert-detail-grid">
+                      <div>
+                        <span className="alert-detail-label">Event</span>
+                        <p>{formatAlertEvent(alertDetailState.alert.event_type)}</p>
+                      </div>
+                      <div>
+                        <span className="alert-detail-label">File</span>
+                        <p>{alertDetailState.alert.file_name}</p>
+                      </div>
+                      <div>
+                        <span className="alert-detail-label">Time</span>
+                        <p>{formatDateTime(alertDetailState.alert.created_at)}</p>
+                      </div>
+                      <div>
+                        <span className="alert-detail-label">Evidence</span>
+                        <p>{alertDetailState.evidence ? formatDateTime(alertDetailState.evidence.captured_at) : 'No visual evidence available'}</p>
+                      </div>
+                    </div>
+
+                    {alertDetailState.imageUrl ? (
+                      <img
+                        className="alert-photo"
+                        src={alertDetailState.imageUrl}
+                        alt="Captured face evidence from decoy session"
+                      />
+                    ) : (
+                      <p className="panel-status">No visual evidence available for this alert.</p>
+                    )}
+                  </div>
+                ) : null}
+              </aside>
+            </div>
           </section>
         ) : null}
       </main>
@@ -309,6 +431,21 @@ function formatAlertEvent(eventType) {
     case 'file_deleted': return 'Deleted';
     default: return eventType;
   }
+}
+
+function formatDateTime(timestamp) {
+  if (!timestamp) {
+    return 'Unknown';
+  }
+
+  const millis = timestamp > 1e12 ? timestamp : timestamp * 1000;
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(millis);
 }
 
 function getDeleteErrorMessage(error) {

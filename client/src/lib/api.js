@@ -80,11 +80,11 @@ export function enrollFace({ embedding }) {
   });
 }
 
-export function verifyFace({ embedding }) {
+export function verifyFace({ embedding, stillImage = null }) {
   return request('/api/verify-face', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ embedding }),
+    body: JSON.stringify({ embedding, still_image: stillImage }),
   });
 }
 
@@ -120,6 +120,35 @@ export function deleteFile(fileId) {
 
 export function getAlerts() {
   return request('/api/alerts');
+}
+
+export function getAlertDetails(alertId) {
+  return request(`/api/alerts/${alertId}`);
+}
+
+export async function getAlertEvidenceImageUrl(evidenceId) {
+  const token = getSessionToken();
+  const response = await fetch(buildUrl(`/api/alert-evidence/${evidenceId}/image`), {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (!response.ok) {
+    let payload = null;
+
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    const error = new Error(payload?.error || `Request failed with status ${response.status}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
 }
 
 export function markAlertsSeen() {
