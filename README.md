@@ -8,6 +8,8 @@ After login, a silent face check decides what the user sees:
 
 There’s no warning, lockout, or obvious mode switch. The fake environment looks normal on purpose.
 
+> ⚠️ **Hackathon prototype — not production-ready.** Mirage is a proof of concept and has not been audited. Do not use it to protect real sensitive data.
+
 ## Why It Exists
 
 Mirage is built for situations where sensitive files may be exposed through:
